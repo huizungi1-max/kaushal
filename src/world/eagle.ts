@@ -514,13 +514,13 @@ export class Eagle implements StageSystem {
         uniforms: { ...this.uniforms, uKind: { value: kind }, uColor: { value: new THREE.Color(color) }, uBands: { value: bands } },
       });
     this.m = {
-      feather: mat(0, '#2a1b12'),
-      plumage: mat(1, '#2b1c12'),
+      feather: mat(0, '#c2470e'),
+      plumage: mat(1, '#b8420d'),
       beak: mat(2, '#cf8a26'),
       cere: mat(2, '#dd9a30'),
       foot: mat(2, '#d39332', 22),
-      beakTip: mat(2, '#2a1e16'),
-      talon: mat(2, '#17120f'),
+      beakTip: mat(2, '#d0560f'),
+      talon: mat(2, '#c94a0c'),
       eye: mat(3, '#d88a20'),
     };
 
