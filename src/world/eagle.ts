@@ -21,9 +21,8 @@ import { Glow } from './glow';
  * Flight is driven by `u` (0 → 1) along a path authored in screen space (NDC x, y + distance),
  * so it frames the same on every viewport. Whenever the origin is on screen the eagle flies
  * itself in from the top-right corner and holds station at `HOLD`, wings beating the whole
- * time — then glides down onto the name, lands on it, closes its wings and sits looking out.
- * The first swipe away and it takes off again: the rest of the flight (out, low-left) plays in
- * lockstep with that move.
+ * time; the first swipe away hands over to the next section and the rest of the flight
+ * (out, low-left) plays in lockstep with that move.
  */
 
 /** [u, ndcX, ndcY, distance, roll] */
@@ -57,18 +56,6 @@ const HOLD = 0.45;
 const ENTER = 2.4;
 /** First visit only: a beat before it appears, while the loader lifts. */
 const FIRST_DELAY = 0.5;
-/** Seconds from the hold to sitting on the name with the wings closed. */
-const LAND = 2.2;
-
-/** A joint orientation from the bone's direction and the way its feathers trail (bird space). */
-function segment(bone: V3, trail: V3) {
-  const x = new THREE.Vector3(...bone).normalize();
-  const f = new THREE.Vector3(...trail);
-  f.addScaledVector(x, -f.dot(x)).normalize();
-  const z = f.negate();
-  const y = new THREE.Vector3().crossVectors(z, x);
-  return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
-}
 
 const cr = (p0: number, p1: number, p2: number, p3: number, t: number) => {
   const t2 = t * t;
@@ -474,15 +461,6 @@ export class Eagle implements StageSystem {
   /** Gentle camera lean toward the bird (read by the app). */
   lean = 0;
   private from = 0;
-  /** Perching: 0 in flight … 1 sat on the name with the wings closed. */
-  private land = 0;
-  private landFrom = 0;
-  private landClock = 0;
-  private nameEl: HTMLElement | null = null;
-  private perchAt = new THREE.Vector2();
-  private folded: { s: THREE.Quaternion; e: THREE.Quaternion; w: THREE.Quaternion } | null = null;
-  private qa = new THREE.Quaternion();
-  private v2 = new THREE.Vector3();
   private prevU = 0;
   /** Fly-in clock on the origin (s); negative while waiting to start. */
   private enter = -FIRST_DELAY;
@@ -525,24 +503,6 @@ export class Eagle implements StageSystem {
     wrist: 0.3,
     /** Share of the frame. */
     size: SIZE,
-    /** Perched: where on the name it sits (share of the word's width, 0.64 ≈ the H). */
-    perchX: 0.645,
-    /** Perched: share of its flying size. */
-    perchSize: 0.62,
-    /** Perched: body attitude (− upright), heading (camera space) and how far the head turns out. */
-    perchPitch: -1.12,
-    perchFx: 0.55,
-    look: 0.85,
-    /**
-     * Folded wing (left, bird space) — per joint [bone direction, way the feathers trail]:
-     * the upper arm down and back, the forearm forward and up to the bend of the wing at the
-     * shoulder, the hand back along the flank with the primaries laid over the tail.
-     */
-    foldS: [[0.22, -0.9, -0.3], [0, 0, -1]] as [V3, V3],
-    foldE: [[-0.06, 0.62, 0.78], [0, 0, -1]] as [V3, V3],
-    foldW: [[0.08, -0.25, -1], [0, -1, 0]] as [V3, V3],
-    /** Folded primaries: turned to lie along the hand (rad, × fan). */
-    foldP: 1.45,
   };
 
   constructor(private world: World) {
@@ -1004,16 +964,12 @@ export class Eagle implements StageSystem {
   /* — stage ———————————————————————————————————————————————————————————— */
 
   onChange(e: ChangeEvent) {
-    if (e.from.kind === 'origin' && e.to.kind !== 'origin') {
-      this.from = this.u;
-      this.landFrom = this.land;
-    }
+    if (e.from.kind === 'origin' && e.to.kind !== 'origin') this.from = this.u;
     if (e.to.kind === 'origin' && e.from.kind !== 'origin') {
       // back on the hero: it flies in again
       this.u = this.prevU = 0;
       this.enter = 0;
       this.amp = 1;
-      this.land = this.landClock = 0;
     }
   }
 
@@ -1038,24 +994,18 @@ export class Eagle implements StageSystem {
       // no travel: while the origin is on screen it is simply there (reduced moves cut at 0.45)
       const shown = s.t >= 1 ? b : s.t < 0.45 ? a : b;
       this.u = shown ? (this.hold ?? HOLD) : 0;
-      this.land = shown && this.hold === null ? 1 : 0;
     } else if (b === 1) {
       // arriving from another section it waits until the camera is nearly home
       if (a === 1 || s.t >= 0.35) this.enter += s.dt;
       const k = clamp(this.enter / ENTER);
       // in fast, settling onto the hold — then a slow drift along the line so it never looks pinned
-      this.u = this.hold ?? HOLD * (1 - Math.pow(1 - k, 2.4));
-      // on the hold it glides on down to the name and settles there
-      if (k >= 1 && this.hold === null) this.landClock += s.dt;
-      this.land = clamp(this.landClock / LAND);
+      const drift = 0.012 * Math.sin(s.time * 0.33) * smoothstep(0.8, 1, k);
+      this.u = this.hold ?? (HOLD * (1 - Math.pow(1 - k, 2.4)) + drift);
     } else if (a === 1) {
       const x = clamp(s.t / 0.55); // gone before the next section settles
       const k = this.from < 0.04 ? smoothstep(0, 1, x) : 1 - Math.pow(1 - x, 1.7);
       this.u = lerp(this.from, 1, k);
-      // takes off: wings open as it leaves the name
-      this.land = this.landFrom * (1 - smoothstep(0, 0.3, x));
     } else this.u = 0;
-    if (env.params.has('perch')) this.land = Number(env.params.get('perch')) || 1;
 
     const speed = Math.abs(this.u - this.prevU) / Math.max(s.dt, 1e-3);
     this.prevU = this.u;
@@ -1110,8 +1060,7 @@ export class Eagle implements StageSystem {
     const fold = smoothstep(0.84, 1.0, u) * 0.75;
     const travel = Math.min(1, speed * 2.5);
     this.amp = still ? 0 : (this.beat ?? damp(this.amp, 0.68 + 0.32 * travel, 3, dt));
-    const L = this.land > 0.001 && this.perchTarget() ? this.land : 0;
-    const A = this.amp * (1 - fold) * (still ? 1 : 0.92 + 0.08 * Math.sin(time * 0.53)) * (1 - smoothstep(0.5, 0.8, L));
+    const A = this.amp * (1 - fold) * (still ? 1 : 0.92 + 0.08 * Math.sin(time * 0.53));
     const dihedral = lerp(T.dih, 0.1, this.amp);
     if (!still) this.phase += Math.PI * 2 * lerp(0.55, 1.0, this.amp) * dt;
     const sn = Math.sin(this.phase);
@@ -1148,81 +1097,5 @@ export class Eagle implements StageSystem {
 
     this.uniforms.uPx.value = this.world.renderer.getPixelRatio();
     this.lean = 0.016 * clamp(k[0], -1, 1);
-    if (L > 0) this.perch(L, time);
-  }
-
-  /* — perching —————————————————————————————————————————————————————————— */
-
-  /** The name on the hero, in NDC: a point on the top of its letters. False when it is not laid out. */
-  private perchTarget() {
-    this.nameEl ??= document.querySelector('.origin-name');
-    const r = this.nameEl?.getBoundingClientRect();
-    if (!r || r.width < 1) return false;
-    const fs = parseFloat(getComputedStyle(this.nameEl!).fontSize) || r.height;
-    // caps sit on the line box's baseline; their tops are ~0.7 em above it
-    const top = r.bottom - fs * 0.1 - fs * 0.78;
-    this.perchAt.set(((r.left + r.width * this.pose.perchX) / innerWidth) * 2 - 1, 1 - (top / innerHeight) * 2);
-    return true;
-  }
-
-  /** Wings closed along the flanks, primaries crossed over the tail (left wing, bird space). */
-  private foldPose() {
-    if (this.folded) return this.folded;
-    const T = this.pose;
-    const s = segment(...T.foldS);
-    const e = segment(...T.foldE);
-    const w = segment(...T.foldW);
-    const sw = s.clone().invert();
-    this.folded = { s, e: sw.multiply(e.clone()), w: e.clone().invert().multiply(w.clone()) };
-    return this.folded;
-  }
-
-  private perch(L: number, time: number) {
-    const T = this.pose;
-    const cam = this.world.rig.camera;
-    const go = smoothstep(0, 1, L); // travel
-    const turn = smoothstep(0.25, 0.85, L); // into the sitting attitude
-    const close = smoothstep(0.6, 1, L); // wings shut
-    const settled = smoothstep(0.9, 1, L);
-
-    // sitting attitude: upright, three-quarter to the viewer, the head turned out of the frame
-    this.vx.set(T.perchFx, 0, 1).normalize();
-    this.up.set(0, 1, 0);
-    this.v0.crossVectors(this.up, this.vx).normalize();
-    this.v1.crossVectors(this.vx, this.v0);
-    this.m4.makeBasis(this.v0, this.v1, this.vx);
-    this.root.quaternion.slerp(this.qa.setFromRotationMatrix(this.m4), turn);
-    this.bank.rotation.z *= 1 - turn;
-    const breathe = 0.004 * Math.sin(time * 1.7) * settled;
-    this.bird.position.y = lerp(this.bird.position.y, breathe, turn);
-    this.bird.rotation.x = lerp(this.bird.rotation.x, T.perchPitch, turn);
-    // now and then it glances along the skyline, then back out
-    const glance = 0.32 * Math.tanh(3 * Math.sin(time * 0.31)) * settled;
-    this.head.rotation.set(-this.bird.rotation.x * lerp(0.8, 0.95, turn) - 0.04, (T.look + glance) * turn, this.head.rotation.z * (1 - turn));
-    this.tail.rotation.x = lerp(this.tail.rotation.x, 0.12, turn);
-    for (const t of this.tailFeathers) t.m.rotation.y = -t.a * lerp(-t.m.rotation.y / (t.a || 1), 0.3, turn);
-    for (const l of this.legs) l.rotation.x = lerp(l.rotation.x, -T.perchPitch - 0.15, smoothstep(0.35, 0.8, L));
-
-    const f = this.foldPose();
-    for (const w of this.wings) {
-      w.shoulder.quaternion.slerp(f.s, close);
-      w.elbow.quaternion.slerp(f.e, close);
-      w.wrist.quaternion.slerp(f.w, close);
-      for (const p of w.primaries) {
-        p.m.rotation.y = lerp(p.m.rotation.y, -this.pose.foldP - 0.05 * p.f, close);
-        p.m.rotation.x = lerp(p.m.rotation.x, 0, close);
-        p.m.rotation.z *= 1 - close;
-      }
-    }
-
-    // smaller on the perch; the feet are put down on the top of the letters
-    this.root.scale.multiplyScalar(lerp(1, T.perchSize, go));
-    this.root.updateMatrixWorld(true);
-    this.v2.set(0, 0, 0);
-    for (const l of this.legs) this.v2.add(cam.worldToLocal(l.localToWorld(this.v1.set(0, -0.09, 0.02))));
-    this.v2.multiplyScalar(1 / this.legs.length).sub(this.root.position); // feet relative to the root
-    this.toCam([this.perchAt.x, this.perchAt.y, this.k[2]], this.v1).sub(this.v2);
-    this.root.position.lerp(this.v1, go);
-    this.lean *= 1 - go;
   }
 }
