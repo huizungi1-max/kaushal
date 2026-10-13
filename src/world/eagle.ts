@@ -634,23 +634,29 @@ export class Eagle implements StageSystem {
     this.head.position.set(0, 0.11, 0.35);
     this.bird.add(this.head);
 
-    // skull: long, flat-crowned and broad behind the eyes, narrowing down into the face
-    const skull = ellipsoid([0.064, 0.056, 0.102], [0, 0, 0], [24, 14]);
+    // Skull: an eagle's wedge — a long flat crown running straight on into the brow line, broad
+    // behind the eyes and tapering hard to the face; a full rounded back of the head into the nape.
+    const skull = ellipsoid([0.063, 0.056, 0.104], [0, 0, 0], [24, 14], 'z', [0, 0, 0], [40, 28]);
     {
       const p = skull.attributes.position as THREE.BufferAttribute;
       for (let i = 0; i < p.count; i++) {
         const z = p.getZ(i);
-        const front = smoothstep(0.0, 0.1, z);
+        const front = smoothstep(-0.01, 0.1, z);
+        const back = smoothstep(-0.03, -0.1, z);
         let y = p.getY(i);
-        if (y > 0) y *= 0.8 - 0.12 * front; // flat crown sloping to the brow
-        p.setXYZ(i, p.getX(i) * (1 - 0.28 * front), y - 0.008 * front, z);
+        let x = p.getX(i);
+        if (y > 0) y *= lerp(0.7, 0.6, front) - 0.06 * back; // flat crown, dipping to the brow
+        else y *= 1 + 0.12 * back; // deep cheeks and throat behind the gape
+        x *= (1 - 0.38 * front) * (1 - 0.04 * back);
+        p.setXYZ(i, x, y - 0.006 * front, z);
       }
       skull.computeVertexNormals();
       weld(skull);
     }
     const brow = (sx: number) =>
-      // the heavy supraorbital ridge that overhangs the eye: the eagle's frown
-      tag(ellipsoid([0.024, 0.013, 0.056], [0.04 * sx, 0.019, 0.054], [6, 4], 'z', [0.28, -0.3 * sx, 0.16 * sx]), 0.2, PLUMAGE);
+      // the heavy supraorbital ridge: a smooth rounded shelf over the eye, running forward and down
+      // to the cere — the eagle's frown
+      tag(ellipsoid([0.02, 0.015, 0.058], [0.031 * sx, 0.016, 0.054], [6, 4], 'z', [0.24, -0.24 * sx, 0.1 * sx], [32, 20]), 0.2, PLUMAGE);
     this.mesh(
       mergeGeometries([
         tag(skull, 0.2, PLUMAGE),
@@ -713,10 +719,12 @@ export class Eagle implements StageSystem {
 
     // eyes set deep under the brow, looking out and forward
     for (const sx of [-1, 1]) {
-      const g = new THREE.SphereGeometry(0.0135, 20, 16);
+      // almond-shaped and set back under the brow: a hard, narrowed stare
+      const g = new THREE.SphereGeometry(0.0132, 24, 18);
+      g.scale(0.7, 1, 1.25); // (x becomes the head's vertical once the pole is turned outward)
       g.rotateZ((-sx * Math.PI) / 2);
       g.rotateY(-sx * 0.42);
-      g.translate(0.044 * sx, 0.009, 0.057);
+      g.translate(0.041 * sx, 0.006, 0.056);
       this.mesh(tag(g, 0, HORN), this.m.eye, this.head);
     }
 
@@ -743,10 +751,10 @@ export class Eagle implements StageSystem {
   private buildLegs() {
     // [yaw, pitch, toe length, claw radius]: three toes forward, the hallux back with the biggest hook
     const digits: [number, number, number, number][] = [
-      [-0.55, 0.7, 0.07, 0.026],
-      [0, 0.6, 0.08, 0.028],
-      [0.55, 0.7, 0.066, 0.025],
-      [Math.PI, 0.5, 0.055, 0.032],
+      [-0.55, 0.7, 0.07, 0.029],
+      [0, 0.6, 0.08, 0.031],
+      [0.55, 0.7, 0.066, 0.028],
+      [Math.PI, 0.5, 0.055, 0.036],
     ];
     const T = 0.09; // tarsus
     const BOOT = 0.062; // feathered down to here
