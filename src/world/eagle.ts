@@ -528,11 +528,13 @@ export class Eagle implements StageSystem {
     /** Perched: where on the name it sits (share of the word's width, 0.64 ≈ the H). */
     perchX: 0.645,
     /** Perched: share of its flying size. */
-    perchSize: 0.62,
+    perchSize: 0.8,
     /** Perched: body attitude (− upright), heading (camera space) and how far the head turns out. */
-    perchPitch: -1.12,
-    perchFx: 0.55,
-    look: 0.85,
+    perchPitch: -0.88,
+    perchFx: 2.0,
+    look: 0.3,
+    /** Folded: the arm's feather ranks tuck in to this share of their length. */
+    tuck: 0.15,
     /**
      * Folded wing (left, bird space) — per joint [bone direction, way the feathers trail]:
      * the upper arm down and back, the forearm forward and up to the bend of the wing at the
@@ -1204,7 +1206,17 @@ export class Eagle implements StageSystem {
     for (const l of this.legs) l.rotation.x = lerp(l.rotation.x, -T.perchPitch - 0.15, smoothstep(0.35, 0.8, L));
 
     const f = this.foldPose();
+    const tuck = lerp(1, this.pose.tuck, close);
     for (const w of this.wings) {
+      // the ranks along the arm can't swing round to the tail, so they close up under the coverts;
+      // the long primaries carry the closed wing down the back
+      for (const j of [w.shoulder, w.elbow, w.wrist])
+        for (const c of j.children) {
+          if (!(c instanceof THREE.Mesh) || w.primaries.some((p) => p.m === c)) continue;
+          if (c.material === this.m.feather) c.scale.z = tuck;
+          // the bony leading edge sinks into the shoulder plumage
+          else c.scale.setScalar(lerp(1, 0.55, close));
+        }
       w.shoulder.quaternion.slerp(f.s, close);
       w.elbow.quaternion.slerp(f.e, close);
       w.wrist.quaternion.slerp(f.w, close);
