@@ -17,7 +17,8 @@ Live site: <https://tfyguiiu.vercel.app>
 - **One gesture, one step.** Keyboard (arrows, Page Up / Down, Space, Home / End), mouse wheel,
   trackpad, touch swipe and drag are each turned into a single transition
   (`src/nav/input.ts`). The Skill Domains and Projects sections move sideways.
-- **Deep links.** Each step has its own URL fragment, for example `#builds-03`.
+- **Deep links.** Each step has its own URL fragment, for example `#builds-03`. Opening such a
+  link goes straight to that step; refreshing the page always returns to the first page.
 - **Content as real HTML.** All copy comes from `src/content/content.ts` and is rendered into
   `index.html` at build time, so it is crawlable and readable by screen readers.
 - **Works without WebGL or JavaScript.** The page falls back to a plain, readable document.

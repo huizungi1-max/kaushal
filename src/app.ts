@@ -144,9 +144,13 @@ export class App {
       if (!env.params.has('fixeddpr')) adaptive.update(dt);
     });
 
-    // Where to begin: deep link, debug, or the origin.
+    // Where to begin: debug param, deep link, or the origin. A page refresh always returns to the
+    // origin, so the step left in the URL fragment is only honoured on a fresh visit.
+    const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+    const reloaded = nav?.type === 'reload';
+    if (reloaded && location.hash) history.replaceState(null, '', location.pathname + location.search);
     const fromParam = env.params.has('step') ? Number(env.params.get('step')) : -1;
-    const start = fromParam >= 0 ? fromParam : stepFromHash(location.hash);
+    const start = fromParam >= 0 ? fromParam : reloaded ? 0 : stepFromHash(location.hash);
     const skipIntro = env.params.has('nointro') || env.reducedMotion || start > 0;
     if (start > 0) this.director.goTo(start, { instant: true });
 
