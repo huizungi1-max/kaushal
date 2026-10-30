@@ -20,13 +20,6 @@ export const env = {
   get coarse() {
     return mqCoarse.matches;
   },
-  get portrait() {
-    return window.innerHeight > window.innerWidth * 1.08;
-  },
-  get narrow() {
-    return window.innerWidth < 760;
-  },
-  /** Debug / capture switches (?step=4&nointro&debug). */
+  /** URL switches for deep links and visual captures (?step=4&nointro&q=low&fixeddpr&fly=0.45). */
   params,
-  debug: params.has('debug'),
 };
