@@ -1,5 +1,27 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
+.vite/
+
+# Visual checkpoint output (scripts/*.mjs)
 .shots/
+
+# Environment files: never commit real values
+.env
+.env.*
+!.env.example
+
+# Logs
 *.log
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
 .DS_Store
+Thumbs.db
+
+# Deployment tooling
+.vercel/
